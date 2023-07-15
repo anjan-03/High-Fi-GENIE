@@ -1,0 +1,292 @@
+{"6019": {"range": 1.11,"dbm": -63.94},"temperature": -127.00}
+Json decxode error Extra data: line 1 column 63 (char 62)
+
+
+version 1:
+
+import serial 
+import time
+import pandas as pd
+import json
+
+def conv_json_csv(json_data):
+	df = pd.DataFrame.from_dict(json_data, orient='index')
+	df.to_csv('data.csv', index_label='key')
+
+ser = serial.Serial('/dev/ttyUSB0', 115200)
+
+while True:
+	if ser.in_waiting > 0:
+		data = ser.readline().decode().strip()
+		# print(type(data)) <class 'str>
+		if (data[ :15] == "Received data: "):
+			ndata = data[15:]
+			print(f"{ndata}")
+			ndata=ndata.strip()
+			try:
+				x=json.loads(ndata)
+			except json.JSONDecodeError as e:
+				print("Json decxode error", e)
+			#conv_json_csv(x)
+		else:
+			print("wron")
+		#print(f"{data}")
+		
+		
+		# for future data processing tasks
+		
+	ser.flush()
+	#time.sleep(1)
+	
+ser.close()
+
+extra character present at the end... probably the null from C. 
+Should remove it by either excluding it or by processing it.
+
+version 1 new:
+
+import serial 
+import time
+import pandas as pd
+import json
+
+def conv_json_csv(json_data):
+	df = pd.DataFrame.from_dict(json_data, orient='index')
+	df.to_csv('data.csv', index_label='key')
+	# insert a try and except here
+
+ser = serial.Serial('/dev/ttyUSB0', 115200)
+
+while True:
+	if ser.in_waiting > 0:
+		data = ser.readline().decode().strip()
+		# print(type(data)) <class 'str>
+		if (data[ :15] == "Received data: "):
+			y=len(data[15:])
+			ndata=data[15:14+y]
+			print(f"{ndata}")
+			try:
+				x=json.loads(ndata)
+				#conv_json_csv(x)
+			except json.JSONDecodeError as e:
+				print("Json decode error", e)
+			
+		else:
+			print("wron")
+		#print(f"{data}")
+		
+		
+		# for future data processing tasks
+		
+	ser.flush()
+	#time.sleep(1)
+	
+ser.close()
+
+
+This works
+
+latest code with error handling features:
+import serial 
+import time
+import pandas as pd
+import json
+
+def conv_json_csv(json_data):
+	
+	try:
+		df = pd.DataFrame.from_dict(json_data, orient='index')
+		df.to_csv('data.csv', index_label='key')
+		print("Success")
+	except AttributeError as ae:
+		print("Attribute error: ", ae)
+	# insert a try and except here
+while True:
+	try:
+		ser = serial.Serial('/dev/ttyUSB0', 115200)
+	except serial.serialutil.SerialException as se:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+	except BrokenPipeError as bpe:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+
+while True:
+	if ser.in_waiting > 0:
+		data = ser.readline().decode().strip()
+		# print(type(data)) <class 'str>
+		if (data[ :15] == "Received data: "):
+			y=len(data[15:])
+			ndata=data[15:14+y]
+			print(f"{ndata}")
+			try:
+				x=json.loads(ndata)
+				conv_json_csv(x)
+			except json.JSONDecodeError as e:
+				print("Json decode error", e)
+			
+		'''else:
+			print("wron")'''
+		#print(f"{data}")
+		
+		
+		# for future data processing tasks
+		
+	ser.flush()
+	#time.sleep(1)
+	
+ser.close()
+
+this code cant execute the main serial reading tasks at all. 
+
+main error so far:
+Float object has no attribute 'items'
+
+when converted to string:
+'str'  object has no attribute 'value'
+
+import serial 
+import time
+import pandas as pd
+import json
+
+def conv_json_csv(json_data):
+	
+	try:
+		df = pd.DataFrame.from_dict(json_data, orient='index')
+		df.to_csv('data.csv', index_label='key')
+		print("Success")
+	except AttributeError as ae:
+		print("Attribute error: ", ae)
+	# insert a try and except here
+	
+while True:
+	try:
+		ser = serial.Serial('/dev/ttyUSB1', 115200)
+		break
+	except serial.serialutil.SerialException:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+	except BrokenPipeError:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+	except termios.error:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+	except OSError:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+
+while True:
+	if ser.in_waiting > 0:
+		data = ser.readline().decode().strip()
+		# print(type(data)) <class 'str>
+		if (data[ :15] == "Received data: "):
+			y=len(data[15:])
+			ndata=data[15:14+y]
+			print(f"{ndata}")
+			try:
+				x=json.loads(ndata)
+				conv_json_csv(x)
+			except json.JSONDecodeError as e:
+				print("Json decode error", e)
+			
+		else:
+			print("wron")
+		#print(f"{data}")
+		
+		
+		# for future data processing tasks
+		
+	ser.flush()
+	#time.sleep(1)
+	
+ser.close()
+
+
+This code fixes the "no output from serial" problem... 
+Break while loop once connected.
+
+this works, removing esp32 in between is the only problem ... excepting OSError isnt wokring
+import serial 
+import time
+import pandas as pd
+import json
+
+def conv_json_csv(json_data):
+	
+	try:
+		df = pd.DataFrame(json_data)
+		df.to_csv('data.csv', index_label='key')
+		print("Success")
+	except AttributeError as ae:
+		print("Attribute error: ", ae)
+	# insert a try and except here
+	
+while True:
+	try:
+		ser = serial.Serial('/dev/ttyUSB0', 115200)
+		break
+	except serial.serialutil.SerialException:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+	except BrokenPipeError:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+	except termios.error:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+	except OSError:
+		print("No device connected! Please check! \n \n")
+		time.sleep(10)
+
+while True:
+	if ser.in_waiting > 0:
+		data = ser.readline().decode().strip()
+		# print(type(data)) <class 'str>
+		if (data[ :15] == "Received data: "):
+			y=len(data[15:])
+			ndata=data[15:14+y]
+			print(f"{ndata}")
+			try:
+				x=json.loads(ndata)
+				print(x)
+				conv_json_csv(x)
+			except json.JSONDecodeError as e:
+				print("Json decode error", e)
+			
+		'''else:
+			print("wron")'''
+		#print(f"{data}")
+		
+		
+	ser.flush()
+	#time.sleep(1)
+	
+ser.close()
+
+
+if dijkstra algo on tag :
+send a struct via esp now
+struct contains:
+	data
+	path route (6019,6018,6017) -->
+	counter (so that the recieiving node which address it sends to)
+	
+to achieve this, tag must know all distances. (not feasible for huge networks)
+complex but good
+
+if dijkstra algo on anchors:
+adds data to a struct variable
+contains:
+	data
+	path route
+	counter
+	
+no need for structure
+since all anchors have dijkstra algo, onrecvdata, make them choose the nest shortest path.
+if you choose structure, would make each anchor have dijkstra redundant and a bit useless too. 
+It also complicates things(bad complexity)
+
+doesnt burden the tag, might not choose the shortest path at times (6+y < 5+x argument)
+where the integers 5 and 6 are the choices of the tag.
