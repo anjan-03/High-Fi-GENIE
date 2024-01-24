@@ -8,6 +8,8 @@
 #include <math.h>
 #include <string.h>
 #include <float.h>
+#include <WiFiUdp.h>
+
 
 #define SPI_SCK 18
 #define SPI_MISO 19
@@ -16,15 +18,22 @@
 #define PIN_RST 27
 #define PIN_IRQ 34
 #define ONE_WIRE_BUS 14
+const char* ssid = "STUDENTS";
+const char* password = "students123";
+const IPAddress piIP(172, 16, 19, 11);
 float d1 = 100; // dist between tag and A1
 float d2 = 100; //distance between tag and A2
 float d3 = 100; //distance between tag and A3
 float d4 = 100; //distance between tag and A4
 
+WiFiUDP udp;
+
 float x; //coordinates for tag
 float y;
 
 int tempadd;
+
+int fcount=0;
 
 int a1 = 6019;  // address of A1 1783
 int a2 = 6018;  // address of A2 1782
@@ -34,23 +43,24 @@ int a4 = 6016;  // address of A4 1780
 float smallest1 = FLT_MAX;
 float smallest2 = FLT_MAX;
 
-float ax=0, ay=0, bx=1, by=0, cx=0, cy=1, dx=1, dy=1;
+float ax=2, ay=0, bx=5, by=5, cx=0, cy=5, dx=3, dy=1;
 
 
 char nodes[] = {'A', 'B', 'C', 'D', 'E'};
 float distances[5][5] = {
-    {0, 1, 1, 1.42, 2.06},
-    {1, 0, 1.42, 1, 2.06},
-    {1, 1.42, 0, 1, 1.02},
-    {1.42, 1, 1, 0, 1.12},
-    {2.06, 2.06, 1.12, 1.12, 0}
+    {0, 5.83, 5.38, 1.41, 2},
+    {5.83, 0, 5, 4.47, 7.07},
+    {5.38, 5, 0, 5, 5},
+    {1.41, 4.47, 5, 0, 3.16},
+    {2, 7.07, 5, 3.16, 0}
+
 };
 
 uint8_t broadcastAddress1[] = {0xC8, 0xF0, 0x9E, 0xBE, 0xFA, 0xFC};   // to A1
 uint8_t broadcastAddress2[] = {0xC8, 0xF0, 0x9E, 0xBE, 0xFA, 0xB0};   // to A2
 uint8_t broadcastAddress3[] = {0x54, 0x43, 0xB2, 0x7F, 0x56, 0xBC};   // to A3
 uint8_t broadcastAddress4[] = {0xD4, 0xD4, 0xDA, 0x46, 0x70, 0x58};   // to A4
-uint8_t broadcastAddress5[] = {0xD4, 0xD4, 0xDA, 0x46, 0x68, 0xC4};   // to A5
+uint8_t broadcastAddress5[] = {0x40, 0x91, 0x51, 0xFB, 0xDF, 0x04};   // to S1
 
 struct MyLink *uwb_data;
 int index_num = 0;
@@ -72,11 +82,14 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 esp_now_peer_info_t peerInfo;
 
-char first_node[1];
+char first_node;
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:\t");
   Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  if (status != ESP_NOW_SEND_SUCCESS) {
+      fcount++;
+  }
 }
 
 void setup()
@@ -177,6 +190,8 @@ void loop()
         Serial.println(first_node);
 
       if (d1<d2 && d1<d3 && d1<d4){ //to A1
+          first_node='A';
+          data.s_node=first_node;
           esp_err_t result1 = esp_now_send(broadcastAddress1, (uint8_t *) &data, sizeof(data));
         
           if (result1==ESP_OK){
@@ -184,9 +199,12 @@ void loop()
           }
           else{
           Serial.println("Error sending data");
+          fcount++;
           }
       }
       else if (d2<d1 && d2<d3 && d2<d4){ // to A2
+          first_node='B';
+          data.s_node=first_node;
           esp_err_t result2 = esp_now_send(broadcastAddress2, (uint8_t *) &data, sizeof(data));
         
           if (result2==ESP_OK){
@@ -194,10 +212,13 @@ void loop()
           }
           else{
             Serial.println("Error sending data");  // in case if failure send data to A1, potential for recursive function?? try until it sends or send for fixed attempts
+            fcount++;
           }
       }
 
       else if (d3<d1 && d3<d2 && d3<d4){ // to A3
+          first_node='C';
+          data.s_node=first_node;
           esp_err_t result3 = esp_now_send(broadcastAddress3, (uint8_t *) &data, sizeof(data));
         
           if (result3==ESP_OK){
@@ -205,10 +226,13 @@ void loop()
           }
           else{
             Serial.println("Error sending data");  // in case if failure send data to A1, potential for recursive function?? try until it sends or send for fixed attempts
+            fcount++;
             Serial.println(result3);
           }
       }
       else if (d4<d1 && d4<d2 && d4<d3){ // to A4
+          first_node='D';
+          data.s_node=first_node;
           esp_err_t result4 = esp_now_send(broadcastAddress4, (uint8_t *) &data, sizeof(data));
         
           if (result4==ESP_OK){
@@ -216,6 +240,7 @@ void loop()
           }
           else{
             Serial.println("Error sending data");  // in case if failure send data to A1, potential for recursive function?? try until it sends or send for fixed attempts
+            fcount++;
             Serial.println(result4);
           }
       }
@@ -226,6 +251,15 @@ void loop()
         delay(1000);
         runtime = millis();
     }
+  if (fcount == 5) {
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(1000);
+      Serial.println("Connecting to WiFi...");
+    }
+    sendUDPMessage("HUGE FIRE! ");
+    fcount = 2;
+  }
 }
 
 void newRange()
@@ -258,10 +292,27 @@ void newRange()
     else if (tempadd==a4){
       d4=DW1000Ranging.getDistantDevice()->getRange();
     }
-
-    findPoint(ax,ay,d1,bx,by,d2,cx,cy,d3);
-
+    if(d4 > d1 && d4 > d2 && d4 > d3){
+      x=findPointx(ax,ay,d1,bx,by,d2,cx,cy,d3);
+      y=findPointy(ax,ay,d1,bx,by,d2,cx,cy,d3);
+    }
+    else if(d3 > d1 && d3 > d2 && d3 > d4){
+      x=findPointx(ax,ay,d1,bx,by,d2,dx,dy,d4);
+      y=findPointy(ax,ay,d1,bx,by,d2,dx,dy,d4);
+    }
+    else if(d2 > d1 && d2 > d3 && d2 > d4){
+      x=findPointx(ax,ay,d1,dx,dy,d4,cx,cy,d3);
+      y=findPointy(ax,ay,d1,dx,dy,d4,cx,cy,d3);
+    }
+    else if(d1 > d3 && d1 > d2 && d1 > d4){
+      x=findPointx(dx,dy,d4,bx,by,d2,cx,cy,d3);
+      y=findPointy(dx,dy,d4,bx,by,d2,cx,cy,d3);
+    }
     func(x,y);
+    Serial.print("X coordinate: ");
+    Serial.println(x);
+    Serial.print("Y coordinate: ");
+    Serial.println(y);
 }
 
 void newDevice(DW1000Device *device)
@@ -281,7 +332,7 @@ void inactiveDevice(DW1000Device *device)
     delete_link(uwb_data, device->getShortAddress());
 }
 
-void findPoint(float x1, float y1, float d1, float x2, float y2, float d2, float x3, float y3, float d3) {
+float findPointx(float x1, float y1, float d1, float x2, float y2, float d2, float x3, float y3, float d3) {
 
     
     float A = 2 * (x2 - x1);
@@ -293,8 +344,23 @@ void findPoint(float x1, float y1, float d1, float x2, float y2, float d2, float
     float F = pow(d2, 2) - pow(d3, 2) - pow(x2, 2) + pow(x3, 2) - pow(y2, 2) + pow(y3, 2);
     
     x = (C*E - F*B) / (E*A - B*D);
-    y = (C*D - A*F) / (B*D - A*E);
+    return x;
+    //printf("The point is (%lf, %lf)\n", x, y);
+}
+
+float findPointy(float x1, float y1, float d1, float x2, float y2, float d2, float x3, float y3, float d3) {
+
     
+    float A = 2 * (x2 - x1);
+    float B = 2 * (y2 - y1);
+    float C = pow(d1, 2) - pow(d2, 2) - pow(x1, 2) + pow(x2, 2) - pow(y1, 2) + pow(y2, 2);
+    
+    float D = 2 * (x3 - x2);
+    float E = 2 * (y3 - y2);
+    float F = pow(d2, 2) - pow(d3, 2) - pow(x2, 2) + pow(x3, 2) - pow(y2, 2) + pow(y3, 2);
+    
+    y = (C*D - A*F) / (B*D - A*E);
+    return y;
     //printf("The point is (%lf, %lf)\n", x, y);
 }
 
@@ -351,13 +417,13 @@ void dijkstra(char current, char nodes[], float distances[5][5], float *visited,
 }
 
 void func(float x, float y) {
-    float ad = sqrt(pow((x - 0), 2) + pow((y - 0), 2));
+    float ad = sqrt(pow((x - 2), 2) + pow((y - 0), 2));
     //ad = round(ad * 10) / 10;
-    float bd = sqrt(pow((x - 1), 2) + pow((y - 0), 2));
+    float bd = sqrt(pow((x - 5), 2) + pow((y - 5), 2));
     //bd = round(bd * 10) / 10;
-    float cd = sqrt(pow((x - 0), 2) + pow((y - 1), 2));
+    float cd = sqrt(pow((x - 0), 2) + pow((y - 5), 2));
     //cd = round(cd * 10) / 10;
-    float dd = sqrt(pow((x - 1), 2) + pow((y - 1), 2));
+    float dd = sqrt(pow((x - 3), 2) + pow((y - 1), 2));
     //dd = round(dd * 10) / 10;
 Serial.print(ad);
 Serial.print(bd);
@@ -370,7 +436,7 @@ Serial.print(dd);
         start_node = 'B';
     else if (cd <= ad && cd <= bd && cd <= dd)
         start_node = 'C';
-    else 
+    else
         start_node = 'D';
 
     const char* start_nodeptr = &start_node;
@@ -384,9 +450,10 @@ Serial.print(dd);
     Serial.print("Path to E: ");
     counter=printPath(start_node, 'E', prevNode, counter);
     Serial.print("\n");
-    Serial.print("this is the starting node: ");
-    Serial.println(start_node);
-    data.s_node=start_node;
+    //Serial.print("this is the starting node: ");
+    //Serial.println(start_node);
+    //Serial.print(ad); Serial.print(bd); Serial.print(cd); Serial.print(dd);
+    //data.s_node=start_node;
 }
 
 int printPath(char start, char end, char *prevNode, int counter) {
@@ -408,4 +475,10 @@ void addTemperatureToJSON(String *json, float temperature)
     *json = json->substring(0, json->length() - 1); // Remove the closing brace
     *json += ",\"temperature\": " + String(temperature);
     *json += "}";
+}
+
+void sendUDPMessage(const char* message) {
+  udp.beginPacket(piIP, 1234); 
+  udp.print(message);
+  udp.endPacket();
 }
